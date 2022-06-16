@@ -93,9 +93,11 @@ public class HttpEntity extends RetryingInputEntity
     // Since we need to set only the start offset, the header is "bytes=<range-start>-".
     // See https://tools.ietf.org/html/rfc7233#section-2.1
     urlConnection.addRequestProperty(HttpHeaders.RANGE, StringUtils.format("bytes=%d-", offset));
+    // Contacts the endpoint for the content range
     final String contentRange = urlConnection.getHeaderField(HttpHeaders.CONTENT_RANGE);
     final boolean withContentRange = contentRange != null && contentRange.startsWith("bytes ");
     if (withContentRange && offset > 0) {
+      // contacts the endpoint for the input stream
       return urlConnection.getInputStream();
     } else {
       if (!withContentRange && offset > 0) {
@@ -105,6 +107,7 @@ public class HttpEntity extends RetryingInputEntity
             + " a lot."
         );
       }
+      // contacts the endpoint for the input stream
       InputStream in = urlConnection.getInputStream();
       try {
         final long skipped = in.skip(offset);
