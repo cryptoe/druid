@@ -18,22 +18,22 @@ echo "Copying integration test resources."
 
 set -e
 
-# setup client keystore
-./docker/tls/generate-client-certs-and-keystores.sh
-rm -rf docker/client_tls
-cp -r client_tls docker/client_tls
-
-# install druid jars
-rm -rf $SHARED_DIR/docker
-mkdir -p $SHARED_DIR
-cp -R docker $SHARED_DIR/docker
-
-pushd ../
-rm -rf distribution/target/apache-druid-$DRUID_VERSION-integration-test-bin
-mvn -DskipTests -T1C -Danimal.sniffer.skip=true -Dcheckstyle.skip=true -Ddruid.console.skip=true -Denforcer.skip=true -Dforbiddenapis.skip=true -Dmaven.javadoc.skip=true -Dpmd.skip=true -Dspotbugs.skip=true install -Pintegration-test
-mv distribution/target/apache-druid-$DRUID_VERSION-integration-test-bin/lib $SHARED_DIR/docker/lib
-mv distribution/target/apache-druid-$DRUID_VERSION-integration-test-bin/extensions $SHARED_DIR/docker/extensions
-popd
+## setup client keystore
+#./docker/tls/generate-client-certs-and-keystores.sh
+#rm -rf docker/client_tls
+#cp -r client_tls docker/client_tls
+#
+## install druid jars
+#rm -rf $SHARED_DIR/docker
+#mkdir -p $SHARED_DIR
+#cp -R docker $SHARED_DIR/docker
+#
+#pushd ../
+#rm -rf distribution/target/apache-druid-$DRUID_VERSION-integration-test-bin
+#mvn -DskipTests -T6C -Ddruid.console.skip=true -Danimal.sniffer.skip=true -Dcheckstyle.skip=true -Ddruid.console.skip=true -Denforcer.skip=true -Dforbiddenapis.skip=true -Dmaven.javadoc.skip=true -Dpmd.skip=true -Dspotbugs.skip=true install -Pintegration-test
+#mv distribution/target/apache-druid-$DRUID_VERSION-integration-test-bin/lib $SHARED_DIR/docker/lib
+#mv distribution/target/apache-druid-$DRUID_VERSION-integration-test-bin/extensions $SHARED_DIR/docker/extensions
+#popd
 
 # Make directoriess if they dont exist
 mkdir -p $SHARED_DIR/hadoop_xml

@@ -7,40 +7,50 @@
         },
         "expectedResults":[
             {
-                "timestamp" : "2016-06-27T00:00:11.000Z",
-                "result" : {
-                    "minTime" : "2016-06-27T00:00:11.000Z",
-                    "maxTime" : "2016-06-27T21:31:02.000Z"
+                "timestamp": "2013-08-31T01:02:33.000Z",
+                "result": {
+                    "minTime": "2013-08-31T01:02:33.000Z",
+                    "maxTime": "2013-08-31T07:11:21.000Z"
                 }
             }
         ]
     },
     {
         "description": "simple aggr",
-        "query":{
-            "queryType" : "topN",
-            "dataSource" : "%%DATASOURCE%%",
-            "intervals" : ["2016-06-27/2016-06-28"],
-            "granularity" : "all",
-            "dimension" : "page",
-            "metric" : "count",
-            "threshold" : 3,
-            "aggregations" : [
+        "query": {
+            "queryType": "topN",
+            "dataSource": "%%DATASOURCE%%",
+            "intervals": [
+                "2013-08-31/2013-09-01"
+            ],
+            "granularity": "all",
+            "dimension": "page",
+            "metric": "count",
+            "threshold": 3,
+            "aggregations": [
                 {
-                    "type" : "count",
-                    "name" : "count"
+                    "type": "count",
+                    "name": "count"
                 }
             ]
         },
-        "expectedResults":[
+        "expectedResults": [
             {
-                "timestamp" : "2016-06-27T00:00:11.000Z",
-                "result" :
-                    [
-                        {"count":58,"page":"Copa América Centenario"},
-                        {"count":32,"page":"User:Cyde/List of candidates for speedy deletion/Subpage"},
-                        {"count":32,"page":"Wikipedia:Administrators' noticeboard/Incidents"}
-                    ]
+                "timestamp": "2013-08-31T01:02:33.000Z",
+                "result": [
+                    {
+                        "count": 2,
+                        "page": "Cherno Alpha"
+                    },
+                    {
+                        "count": 2,
+                        "page": "Gypsy Danger"
+                    },
+                    {
+                        "count": 2,
+                        "page": "Striker Eureka"
+                    }
+                ]
             }
         ]
     }

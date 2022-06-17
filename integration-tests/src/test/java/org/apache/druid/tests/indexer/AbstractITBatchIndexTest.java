@@ -134,17 +134,41 @@ public abstract class AbstractITBatchIndexTest extends AbstractIndexerTest
       Pair<Boolean, Boolean> segmentAvailabilityConfirmationPair
   ) throws IOException
   {
+
+    doIndexTask(
+        dataSource,
+        taskSpecTransform,
+        queryFilePath,
+        waitForNewVersion,
+        runTestQueries,
+        waitForSegmentsToLoad,
+        segmentAvailabilityConfirmationPair,
+        getResourceAsString(indexTaskFilePath)
+    );
+  }
+
+  protected void doIndexTask(
+      String dataSource,
+      Function<String, String> taskSpecTransform,
+      String queryFilePath,
+      boolean waitForNewVersion,
+      boolean runTestQueries,
+      boolean waitForSegmentsToLoad,
+      Pair<Boolean, Boolean> segmentAvailabilityConfirmationPair,
+      String taskSpecContents
+  )
+  {
     final String fullDatasourceName = dataSource + config.getExtraDatasourceNameSuffix();
-    final String taskSpec = taskSpecTransform.apply(
+    final String taskSpecContentsWithDataSourceName = taskSpecTransform.apply(
         StringUtils.replace(
-            getResourceAsString(indexTaskFilePath),
+            taskSpecContents,
             "%%DATASOURCE%%",
             fullDatasourceName
         )
     );
 
     submitTaskAndWait(
-        taskSpec,
+        taskSpecContentsWithDataSourceName,
         fullDatasourceName,
         waitForNewVersion,
         waitForSegmentsToLoad,

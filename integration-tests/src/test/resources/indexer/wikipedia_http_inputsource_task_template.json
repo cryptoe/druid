@@ -46,14 +46,19 @@
       "granularitySpec": {
         "segmentGranularity": "DAY",
         "queryGranularity": "second",
-        "intervals" : [ "2016-06/P1M" ]
+        "intervals": [
+          "2013-08/P1M"
+        ]
       }
     },
     "ioConfig": {
       "type": "index_parallel",
       "inputSource": {
         "type": "http",
-        "uris": ["https://druid.apache.org/data/wikipedia.json.gz", "https://druid.apache.org/data/wikipedia.json.gz"]
+        "uris": [
+          "http://%%url%%/wikipedia.json",
+          "http://%%url%%/wikipedia.json"
+        ]
       },
       "inputFormat": {
         "type": "json"
