@@ -43,6 +43,7 @@ import org.apache.druid.msq.exec.WorkerClient;
 import org.apache.druid.msq.exec.WorkerContext;
 import org.apache.druid.msq.exec.WorkerMemoryParameters;
 import org.apache.druid.msq.exec.WorkerStorageParameters;
+import org.apache.druid.msq.guice.MultiStageQuery;
 import org.apache.druid.msq.indexing.client.IndexerControllerClient;
 import org.apache.druid.msq.indexing.client.IndexerWorkerClient;
 import org.apache.druid.msq.indexing.client.WorkerChatHandler;
@@ -51,6 +52,7 @@ import org.apache.druid.msq.kernel.WorkOrder;
 import org.apache.druid.msq.util.MultiStageQueryContext;
 import org.apache.druid.query.QueryContext;
 import org.apache.druid.query.QueryToolChestWarehouse;
+import org.apache.druid.query.policy.PolicyEnforcer;
 import org.apache.druid.rpc.ServiceClientFactory;
 import org.apache.druid.rpc.ServiceLocations;
 import org.apache.druid.rpc.ServiceLocator;
@@ -61,6 +63,8 @@ import org.apache.druid.rpc.indexing.SpecificTaskServiceLocator;
 import org.apache.druid.segment.IndexIO;
 import org.apache.druid.segment.loading.SegmentCacheManager;
 import org.apache.druid.server.DruidNode;
+import org.apache.druid.storage.StorageConnector;
+import org.apache.druid.storage.StorageConnectorProvider;
 
 import java.io.File;
 import java.util.concurrent.ExecutorService;
@@ -106,7 +110,6 @@ public class IndexerWorkerContext implements WorkerContext
   {
     this.task = task;
     this.toolbox = toolbox;
-    this.injector = injector;
     this.overlordClient = overlordClient;
     this.indexIO = indexIO;
     this.dataSegmentProvider = dataSegmentProvider;
@@ -121,6 +124,11 @@ public class IndexerWorkerContext implements WorkerContext
         IndexerControllerContext.DEFAULT_MAX_CONCURRENT_STAGES
     );
     this.includeAllCounters = MultiStageQueryContext.getIncludeAllCounters(queryContext);
+    final StorageConnectorProvider storageConnectorProvider = injector.getInstance(Key.get(StorageConnectorProvider.class, MultiStageQuery.class));
+    final StorageConnector storageConnector = storageConnectorProvider.createStorageConnector(toolbox.getIndexingTmpDir());
+    this.injector = injector.createChildInjector(
+        binder -> binder.bind(Key.get(StorageConnector.class, MultiStageQuery.class))
+                        .toInstance(storageConnector));
   }
 
   public static IndexerWorkerContext createProductionInstance(
@@ -182,6 +190,12 @@ public class IndexerWorkerContext implements WorkerContext
   public ObjectMapper jsonMapper()
   {
     return toolbox.getJsonMapper();
+  }
+
+  @Override
+  public PolicyEnforcer policyEnforcer()
+  {
+    return toolbox.getPolicyEnforcer();
   }
 
   @Override

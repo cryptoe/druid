@@ -54,6 +54,20 @@ public class DruidExceptionMatcher extends DiagnosingMatcher<Throwable>
     return invalidInput().expectContext("sourceType", "sql");
   }
 
+  public static DruidExceptionMatcher internalServerError()
+  {
+    return new DruidExceptionMatcher(
+        DruidException.Persona.OPERATOR,
+        DruidException.Category.RUNTIME_FAILURE,
+        "internalServerError"
+    );
+  }
+
+  public static DruidExceptionMatcher forbidden()
+  {
+    return new DruidExceptionMatcher(DruidException.Persona.USER, DruidException.Category.FORBIDDEN, "general");
+  }
+
   public static DruidExceptionMatcher defensive()
   {
     return new DruidExceptionMatcher(

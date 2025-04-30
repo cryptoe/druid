@@ -42,15 +42,16 @@ import org.apache.druid.msq.indexing.error.BroadcastTablesTooLargeFault;
 import org.apache.druid.msq.indexing.error.MSQException;
 import org.apache.druid.query.DataSource;
 import org.apache.druid.query.InlineDataSource;
+import org.apache.druid.query.JoinAlgorithm;
 import org.apache.druid.query.JoinDataSource;
 import org.apache.druid.query.Query;
 import org.apache.druid.query.QueryContext;
+import org.apache.druid.query.policy.NoopPolicyEnforcer;
 import org.apache.druid.segment.CursorFactory;
 import org.apache.druid.segment.QueryableIndexCursorFactory;
 import org.apache.druid.segment.TestIndex;
 import org.apache.druid.segment.join.JoinConditionAnalysis;
 import org.apache.druid.segment.join.JoinType;
-import org.apache.druid.sql.calcite.planner.JoinAlgorithm;
 import org.apache.druid.sql.calcite.planner.PlannerContext;
 import org.apache.druid.testing.InitializedNullHandlingTest;
 import org.easymock.EasyMock;
@@ -129,6 +130,7 @@ public class BroadcastJoinSegmentMapFnProcessorTest extends InitializedNullHandl
 
     final BroadcastJoinSegmentMapFnProcessor broadcastJoinReader = new BroadcastJoinSegmentMapFnProcessor(
         null /* Query; not used for the methods we're testing */,
+        NoopPolicyEnforcer.instance(),
         sideStageChannelNumberMap,
         channels,
         channelReaders,
@@ -190,6 +192,7 @@ public class BroadcastJoinSegmentMapFnProcessorTest extends InitializedNullHandl
             JoinConditionAnalysis.forExpression("x == \"j.x\"", "j.", ExprMacroTable.nil()),
             JoinType.INNER,
             null,
+            null,
             null
         )
     );
@@ -219,6 +222,7 @@ public class BroadcastJoinSegmentMapFnProcessorTest extends InitializedNullHandl
 
     final BroadcastJoinSegmentMapFnProcessor broadcastJoinHelper = new BroadcastJoinSegmentMapFnProcessor(
         null /* Query; not used for the methods we're testing */,
+        NoopPolicyEnforcer.instance(),
         sideStageChannelNumberMap,
         channels,
         channelReaders,
@@ -270,6 +274,7 @@ public class BroadcastJoinSegmentMapFnProcessorTest extends InitializedNullHandl
     EasyMock.replay(mockQuery);
     final BroadcastJoinSegmentMapFnProcessor broadcastJoinHelper = new BroadcastJoinSegmentMapFnProcessor(
         mockQuery,
+        NoopPolicyEnforcer.instance(),
         sideStageChannelNumberMap,
         channels,
         channelReaders,

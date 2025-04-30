@@ -22,7 +22,6 @@ import {
   ButtonGroup,
   Callout,
   FormGroup,
-  Icon,
   Intent,
   Menu,
   MenuDivider,
@@ -31,6 +30,8 @@ import {
   Tag,
 } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
+import classNames from 'classnames';
+import { select, selectAll } from 'd3-selection';
 import {
   C,
   Column,
@@ -40,15 +41,13 @@ import {
   SqlExpression,
   SqlQuery,
   SqlType,
-} from '@druid-toolkit/query';
-import classNames from 'classnames';
-import { select, selectAll } from 'd3-selection';
+} from 'druid-query-toolkit';
 import type { JSX } from 'react';
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import {
   ClearableInput,
-  ENABLE_DISABLE_OPTIONS_TEXT,
+  ENABLED_DISABLED_OPTIONS_TEXT,
   LearnMore,
   Loader,
   MenuBoolean,
@@ -83,6 +82,7 @@ import {
   dataTypeToIcon,
   deepSet,
   DruidError,
+  EXPERIMENTAL_ICON,
   filterMap,
   oneOf,
   queryDruidSql,
@@ -106,8 +106,6 @@ import { PreviewTable } from './preview-table/preview-table';
 import { RollupAnalysisPane } from './rollup-analysis-pane/rollup-analysis-pane';
 
 import './schema-step.scss';
-
-const EXPERIMENTAL_ICON = <Icon icon={IconNames.WARNING_SIGN} title="Experimental" />;
 
 const queryRunner = new QueryRunner();
 
@@ -407,12 +405,15 @@ export const SchemaStep = function SchemaStep(props: SchemaStepProps) {
 
   const [existingTableState] = useQueryManager<string, string[]>({
     initQuery: '',
-    processQuery: async (_: string, _cancelToken) => {
+    processQuery: async (_, cancelToken) => {
       // Check if datasource already exists
-      const tables = await queryDruidSql({
-        query: `SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'druid' ORDER BY TABLE_NAME ASC`,
-        resultFormat: 'array',
-      });
+      const tables = await queryDruidSql(
+        {
+          query: `SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'druid' ORDER BY TABLE_NAME ASC`,
+          resultFormat: 'array',
+        },
+        cancelToken,
+      );
 
       return tables.map(t => t[0]);
     },
@@ -426,7 +427,7 @@ export const SchemaStep = function SchemaStep(props: SchemaStepProps) {
 
   const [sampleState] = useQueryManager<ExternalConfig, QueryResult, Execution>({
     query: sampleExternalConfig,
-    processQuery: async sampleExternalConfig => {
+    processQuery: async (sampleExternalConfig, cancelToken) => {
       const sampleResponse = await postToSampler(
         {
           type: 'index_parallel',
@@ -469,6 +470,7 @@ export const SchemaStep = function SchemaStep(props: SchemaStepProps) {
           },
         },
         'sample',
+        cancelToken,
       );
 
       const columns = getHeaderFromSampleResponse(sampleResponse).map(({ name, type }) => {
@@ -690,7 +692,7 @@ export const SchemaStep = function SchemaStep(props: SchemaStepProps) {
                     text="Force segment sort by time"
                     value={forceSegmentSortByTime}
                     onValueChange={v => changeForceSegmentSortByTime(Boolean(v))}
-                    optionsText={ENABLE_DISABLE_OPTIONS_TEXT}
+                    optionsText={ENABLED_DISABLED_OPTIONS_TEXT}
                     optionsLabelElement={{ false: EXPERIMENTAL_ICON }}
                   />
                 </Menu>
@@ -829,7 +831,7 @@ export const SchemaStep = function SchemaStep(props: SchemaStepProps) {
                 className="column-filter-control"
                 value={columnSearch}
                 placeholder="Search columns"
-                onChange={setColumnSearch}
+                onValueChange={setColumnSearch}
               />
             </div>
           )}

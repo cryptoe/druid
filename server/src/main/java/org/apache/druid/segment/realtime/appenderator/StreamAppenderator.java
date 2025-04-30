@@ -152,7 +152,6 @@ public class StreamAppenderator implements Appenderator
   private final Set<SegmentIdWithShardSpec> droppingSinks = Sets.newConcurrentHashSet();
   private final long maxBytesTuningConfig;
   private final boolean skipBytesInMemoryOverheadCheck;
-  private final boolean useMaxMemoryEstimates;
 
   private final QuerySegmentWalker texasRanger;
   // This variable updated in add(), persist(), and drop()
@@ -230,7 +229,6 @@ public class StreamAppenderator implements Appenderator
       Cache cache,
       RowIngestionMeters rowIngestionMeters,
       ParseExceptionHandler parseExceptionHandler,
-      boolean useMaxMemoryEstimates,
       CentralizedDatasourceSchemaConfig centralizedDatasourceSchemaConfig
   )
   {
@@ -251,7 +249,6 @@ public class StreamAppenderator implements Appenderator
 
     maxBytesTuningConfig = tuningConfig.getMaxBytesInMemoryOrDefault();
     skipBytesInMemoryOverheadCheck = tuningConfig.isSkipBytesInMemoryOverheadCheck();
-    this.useMaxMemoryEstimates = useMaxMemoryEstimates;
     this.centralizedDatasourceSchemaConfig = centralizedDatasourceSchemaConfig;
     this.sinkSchemaAnnouncer = new SinkSchemaAnnouncer();
 
@@ -439,7 +436,7 @@ public class StreamAppenderator implements Appenderator
 
         Futures.addCallback(
             persistAll(committerSupplier == null ? null : committerSupplier.get()),
-            new FutureCallback<Object>()
+            new FutureCallback<>()
             {
               @Override
               public void onSuccess(@Nullable Object result)
@@ -523,10 +520,12 @@ public class StreamAppenderator implements Appenderator
           identifier.getVersion(),
           tuningConfig.getAppendableIndexSpec(),
           tuningConfig.getMaxRowsInMemory(),
-          maxBytesTuningConfig,
-          useMaxMemoryEstimates
+          maxBytesTuningConfig
       );
       bytesCurrentlyInMemory.addAndGet(calculateSinkMemoryInUsed(retVal));
+
+      // Add sink prior to announcing it, to ensure it is immediately queryable.
+      addSink(identifier, retVal);
 
       try {
         segmentAnnouncer.announceSegment(retVal.getSegment());
@@ -536,8 +535,6 @@ public class StreamAppenderator implements Appenderator
            .addData("interval", retVal.getInterval())
            .emit();
       }
-
-      addSink(identifier, retVal);
     }
 
     return retVal;
@@ -684,7 +681,7 @@ public class StreamAppenderator implements Appenderator
     final Stopwatch persistStopwatch = Stopwatch.createStarted();
     AtomicLong totalPersistedRows = new AtomicLong(numPersistedRows);
     final ListenableFuture<Object> future = persistExecutor.submit(
-        new Callable<Object>()
+        new Callable<>()
         {
           @Override
           public Object call() throws IOException
@@ -1410,7 +1407,6 @@ public class StreamAppenderator implements Appenderator
             tuningConfig.getAppendableIndexSpec(),
             tuningConfig.getMaxRowsInMemory(),
             maxBytesTuningConfig,
-            useMaxMemoryEstimates,
             hydrants
         );
         rowsSoFar += currSink.getNumRows();

@@ -31,6 +31,7 @@ import org.apache.druid.data.input.impl.JSONParseSpec;
 import org.apache.druid.data.input.impl.MapInputRowParser;
 import org.apache.druid.data.input.impl.TimestampSpec;
 import org.apache.druid.guice.BuiltInTypesModule;
+import org.apache.druid.indexer.granularity.UniformGranularitySpec;
 import org.apache.druid.jackson.AggregatorsModule;
 import org.apache.druid.jackson.DefaultObjectMapper;
 import org.apache.druid.java.util.common.FileUtils;
@@ -47,6 +48,8 @@ import org.apache.druid.query.QueryRunnerTestHelper;
 import org.apache.druid.query.aggregation.CountAggregatorFactory;
 import org.apache.druid.query.aggregation.LongSumAggregatorFactory;
 import org.apache.druid.query.expression.TestExprMacroTable;
+import org.apache.druid.query.policy.NoopPolicyEnforcer;
+import org.apache.druid.query.policy.PolicyEnforcer;
 import org.apache.druid.query.scan.ScanQuery;
 import org.apache.druid.query.scan.ScanQueryConfig;
 import org.apache.druid.query.scan.ScanQueryEngine;
@@ -66,7 +69,6 @@ import org.apache.druid.segment.incremental.RowIngestionMeters;
 import org.apache.druid.segment.incremental.SimpleRowIngestionMeters;
 import org.apache.druid.segment.indexing.DataSchema;
 import org.apache.druid.segment.indexing.TuningConfig;
-import org.apache.druid.segment.indexing.granularity.UniformGranularitySpec;
 import org.apache.druid.segment.loading.DataSegmentPusher;
 import org.apache.druid.segment.loading.SegmentLoaderConfig;
 import org.apache.druid.segment.metadata.CentralizedDatasourceSchemaConfig;
@@ -109,7 +111,9 @@ public class StreamAppenderatorTester implements AutoCloseable
       final RowIngestionMeters rowIngestionMeters,
       final boolean skipBytesInMemoryOverheadCheck,
       final DataSegmentAnnouncer announcer,
-      final CentralizedDatasourceSchemaConfig centralizedDatasourceSchemaConfig
+      final CentralizedDatasourceSchemaConfig centralizedDatasourceSchemaConfig,
+      final ServiceEmitter serviceEmitter,
+      final PolicyEnforcer policyEnforcer
   )
   {
     objectMapper = new DefaultObjectMapper();
@@ -145,18 +149,18 @@ public class StreamAppenderatorTester implements AutoCloseable
                        .withObjectMapper(objectMapper)
                        .build();
     tuningConfig = new TestAppenderatorConfig(
-      TuningConfig.DEFAULT_APPENDABLE_INDEX,
-      maxRowsInMemory,
-      maxSizeInBytes == 0L ? getDefaultMaxBytesInMemory() : maxSizeInBytes,
-      skipBytesInMemoryOverheadCheck,
-      IndexSpec.DEFAULT,
-      0,
-      false,
-      0L,
-      OffHeapMemorySegmentWriteOutMediumFactory.instance(),
-      IndexMerger.UNLIMITED_MAX_COLUMNS_TO_MERGE,
-      basePersistDirectory
-  );
+        TuningConfig.DEFAULT_APPENDABLE_INDEX,
+        maxRowsInMemory,
+        maxSizeInBytes == 0L ? getDefaultMaxBytesInMemory() : maxSizeInBytes,
+        skipBytesInMemoryOverheadCheck,
+        IndexSpec.DEFAULT,
+        0,
+        false,
+        0L,
+        OffHeapMemorySegmentWriteOutMediumFactory.instance(),
+        IndexMerger.UNLIMITED_MAX_COLUMNS_TO_MERGE,
+        basePersistDirectory
+    );
 
     metrics = new SegmentGenerationMetrics();
     queryExecutor = Execs.singleThreaded("queryExecutor(%d)");
@@ -174,11 +178,12 @@ public class StreamAppenderatorTester implements AutoCloseable
         OffHeapMemorySegmentWriteOutMediumFactory.instance()
     );
 
-    emitter = new ServiceEmitter(
+    emitter = serviceEmitter == null ? new ServiceEmitter(
         "test",
         "test",
         new NoopEmitter()
-    );
+    ) : serviceEmitter;
+
     emitter.start();
     EmittingLogger.registerEmitter(emitter);
     dataSegmentPusher = new DataSegmentPusher()
@@ -224,29 +229,27 @@ public class StreamAppenderatorTester implements AutoCloseable
           objectMapper,
           indexIO,
           indexMerger,
-          new DefaultQueryRunnerFactoryConglomerate(
-              ImmutableMap.of(
-                  TimeseriesQuery.class, new TimeseriesQueryRunnerFactory(
-                      new TimeseriesQueryQueryToolChest(),
-                      new TimeseriesQueryEngine(),
-                      QueryRunnerTestHelper.NOOP_QUERYWATCHER
-                  ),
-                  ScanQuery.class, new ScanQueryRunnerFactory(
-                      new ScanQueryQueryToolChest(DefaultGenericQueryMetricsFactory.instance()),
-                      new ScanQueryEngine(),
-                      new ScanQueryConfig()
-                  )
+          DefaultQueryRunnerFactoryConglomerate.buildFromQueryRunnerFactories(ImmutableMap.of(
+              TimeseriesQuery.class, new TimeseriesQueryRunnerFactory(
+                  new TimeseriesQueryQueryToolChest(),
+                  new TimeseriesQueryEngine(),
+                  QueryRunnerTestHelper.NOOP_QUERYWATCHER
+              ),
+              ScanQuery.class, new ScanQueryRunnerFactory(
+                  new ScanQueryQueryToolChest(DefaultGenericQueryMetricsFactory.instance()),
+                  new ScanQueryEngine(),
+                  new ScanQueryConfig()
               )
-          ),
+          )),
           announcer,
           emitter,
           new ForwardingQueryProcessingPool(queryExecutor),
           MapCache.create(2048),
           new CacheConfig(),
           new CachePopulatorStats(),
+          policyEnforcer,
           rowIngestionMeters,
           new ParseExceptionHandler(rowIngestionMeters, false, Integer.MAX_VALUE, 0),
-          true,
           centralizedDatasourceSchemaConfig
       );
     } else {
@@ -268,29 +271,27 @@ public class StreamAppenderatorTester implements AutoCloseable
           objectMapper,
           indexIO,
           indexMerger,
-          new DefaultQueryRunnerFactoryConglomerate(
-              ImmutableMap.of(
-                  TimeseriesQuery.class, new TimeseriesQueryRunnerFactory(
-                      new TimeseriesQueryQueryToolChest(),
-                      new TimeseriesQueryEngine(),
-                      QueryRunnerTestHelper.NOOP_QUERYWATCHER
-                  ),
-                  ScanQuery.class, new ScanQueryRunnerFactory(
-                      new ScanQueryQueryToolChest(DefaultGenericQueryMetricsFactory.instance()),
-                      new ScanQueryEngine(),
-                      new ScanQueryConfig()
-                  )
+          DefaultQueryRunnerFactoryConglomerate.buildFromQueryRunnerFactories(ImmutableMap.of(
+              TimeseriesQuery.class, new TimeseriesQueryRunnerFactory(
+                  new TimeseriesQueryQueryToolChest(),
+                  new TimeseriesQueryEngine(),
+                  QueryRunnerTestHelper.NOOP_QUERYWATCHER
+              ),
+              ScanQuery.class, new ScanQueryRunnerFactory(
+                  new ScanQueryQueryToolChest(DefaultGenericQueryMetricsFactory.instance()),
+                  new ScanQueryEngine(),
+                  new ScanQueryConfig()
               )
-          ),
+          )),
           new NoopDataSegmentAnnouncer(),
           emitter,
           new ForwardingQueryProcessingPool(queryExecutor),
           MapCache.create(2048),
           new CacheConfig(),
           new CachePopulatorStats(),
+          NoopPolicyEnforcer.instance(),
           rowIngestionMeters,
           new ParseExceptionHandler(rowIngestionMeters, false, Integer.MAX_VALUE, 0),
-          true,
           centralizedDatasourceSchemaConfig
       );
     }
@@ -354,6 +355,8 @@ public class StreamAppenderatorTester implements AutoCloseable
     private RowIngestionMeters rowIngestionMeters;
     private boolean skipBytesInMemoryOverheadCheck;
     private int delayInMilli = 0;
+    private ServiceEmitter serviceEmitter;
+    private PolicyEnforcer policyEnforcer = NoopPolicyEnforcer.instance();
 
     public Builder maxRowsInMemory(final int maxRowsInMemory)
     {
@@ -397,6 +400,18 @@ public class StreamAppenderatorTester implements AutoCloseable
       return this;
     }
 
+    public Builder withServiceEmitter(ServiceEmitter serviceEmitter)
+    {
+      this.serviceEmitter = serviceEmitter;
+      return this;
+    }
+
+    public Builder withPolicyEnforcer(PolicyEnforcer policyEnforcer)
+    {
+      this.policyEnforcer = policyEnforcer;
+      return this;
+    }
+
     public StreamAppenderatorTester build()
     {
       return new StreamAppenderatorTester(
@@ -408,7 +423,9 @@ public class StreamAppenderatorTester implements AutoCloseable
           rowIngestionMeters == null ? new SimpleRowIngestionMeters() : rowIngestionMeters,
           skipBytesInMemoryOverheadCheck,
           new NoopDataSegmentAnnouncer(),
-          CentralizedDatasourceSchemaConfig.create()
+          CentralizedDatasourceSchemaConfig.create(),
+          serviceEmitter,
+          policyEnforcer
       );
     }
 
@@ -426,7 +443,9 @@ public class StreamAppenderatorTester implements AutoCloseable
           rowIngestionMeters == null ? new SimpleRowIngestionMeters() : rowIngestionMeters,
           skipBytesInMemoryOverheadCheck,
           dataSegmentAnnouncer,
-          config
+          config,
+          serviceEmitter,
+          policyEnforcer
       );
     }
   }

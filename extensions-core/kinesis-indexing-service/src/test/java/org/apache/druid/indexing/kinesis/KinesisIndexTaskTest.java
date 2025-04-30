@@ -89,6 +89,7 @@ import org.apache.druid.segment.transform.ExpressionTransform;
 import org.apache.druid.segment.transform.TransformSpec;
 import org.apache.druid.timeline.DataSegment;
 import org.easymock.EasyMock;
+import org.joda.time.Duration;
 import org.joda.time.Period;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -785,13 +786,14 @@ public class KinesisIndexTaskTest extends SeekableStreamIndexTaskTestBase
             "awsEndpoint",
             null,
             null,
-            null
+            null,
+            Duration.standardHours(2).getStandardMinutes()
         )
     );
 
     final ListenableFuture<TaskStatus> future = runTask(task);
 
-    waitUntil(task, this::isTaskReading);
+    waitUntil(task, this::isTaskPublishing);
 
     // Wait for task to exit
     Assert.assertEquals(TaskState.SUCCESS, future.get().getStatusCode());
@@ -847,13 +849,14 @@ public class KinesisIndexTaskTest extends SeekableStreamIndexTaskTestBase
             "awsEndpoint",
             null,
             null,
-            null
+            null,
+            Duration.standardHours(2).getStandardMinutes()
         )
     );
 
     final ListenableFuture<TaskStatus> future = runTask(task);
 
-    waitUntil(task, this::isTaskReading);
+    waitUntil(task, this::isTaskPublishing);
 
     // Wait for task to exit
     Assert.assertEquals(TaskState.SUCCESS, future.get().getStatusCode());
@@ -912,7 +915,7 @@ public class KinesisIndexTaskTest extends SeekableStreamIndexTaskTestBase
     );
 
     final ListenableFuture<TaskStatus> future = runTask(task);
-    waitUntil(task, this::isTaskReading);
+    waitUntil(task, this::isTaskPublishing);
 
     // Wait for task to exit
     Assert.assertEquals(TaskState.SUCCESS, future.get().getStatusCode());
@@ -1946,7 +1949,8 @@ public class KinesisIndexTaskTest extends SeekableStreamIndexTaskTestBase
             "awsEndpoint",
             null,
             null,
-            null
+            null,
+            Duration.standardHours(2).getStandardMinutes()
         ),
         context
     );
@@ -2108,7 +2112,8 @@ public class KinesisIndexTaskTest extends SeekableStreamIndexTaskTestBase
             "awsEndpoint",
             null,
             null,
-            null
+            null,
+            Duration.standardHours(2).getStandardMinutes()
         ),
         context
     );
@@ -2309,7 +2314,8 @@ public class KinesisIndexTaskTest extends SeekableStreamIndexTaskTestBase
             "awsEndpoint",
             null,
             null,
-            null
+            null,
+            Duration.standardHours(2).getStandardMinutes()
         ),
         null
     );
@@ -2418,18 +2424,16 @@ public class KinesisIndexTaskTest extends SeekableStreamIndexTaskTestBase
   @Override
   protected QueryRunnerFactoryConglomerate makeQueryRunnerConglomerate()
   {
-    return new DefaultQueryRunnerFactoryConglomerate(
-        ImmutableMap.of(
-            TimeseriesQuery.class,
-            new TimeseriesQueryRunnerFactory(
-                new TimeseriesQueryQueryToolChest(),
-                new TimeseriesQueryEngine(),
-                (query, future) -> {
-                  // do nothing
-                }
-            )
+    return DefaultQueryRunnerFactoryConglomerate.buildFromQueryRunnerFactories(ImmutableMap.of(
+        TimeseriesQuery.class,
+        new TimeseriesQueryRunnerFactory(
+            new TimeseriesQueryQueryToolChest(),
+            new TimeseriesQueryEngine(),
+            (query, future) -> {
+              // do nothing
+            }
         )
-    );
+    ));
   }
 
   private void makeToolboxFactory() throws IOException
@@ -2455,6 +2459,16 @@ public class KinesisIndexTaskTest extends SeekableStreamIndexTaskTestBase
   private boolean isTaskReading(KinesisIndexTask task)
   {
     return task.getRunner().getStatus() == SeekableStreamIndexTaskRunner.Status.READING;
+  }
+
+  /**
+   * Return true if specified task is in PUBLISHING state
+   * @param task {@link KinesisIndexTask} having its state checked
+   * @return true if task is in PUBLISHING state, otherwise false
+   */
+  private boolean isTaskPublishing(KinesisIndexTask task)
+  {
+    return task.getRunner().getStatus() == SeekableStreamIndexTaskRunner.Status.PUBLISHING;
   }
 
   private static KinesisRecordEntity kjb(

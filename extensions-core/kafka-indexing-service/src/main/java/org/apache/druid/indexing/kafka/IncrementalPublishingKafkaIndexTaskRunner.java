@@ -37,7 +37,6 @@ import org.apache.druid.indexing.seekablestream.common.RecordSupplier;
 import org.apache.druid.indexing.seekablestream.common.StreamPartition;
 import org.apache.druid.java.util.common.ISE;
 import org.apache.druid.java.util.emitter.EmittingLogger;
-import org.apache.druid.server.security.AuthorizerMapper;
 import org.apache.druid.utils.CollectionUtils;
 import org.apache.kafka.clients.consumer.OffsetOutOfRangeException;
 import org.apache.kafka.common.TopicPartition;
@@ -66,14 +65,12 @@ public class IncrementalPublishingKafkaIndexTaskRunner extends SeekableStreamInd
   IncrementalPublishingKafkaIndexTaskRunner(
       KafkaIndexTask task,
       @Nullable InputRowParser<ByteBuffer> parser,
-      AuthorizerMapper authorizerMapper,
       LockGranularity lockGranularityToUse
   )
   {
     super(
         task,
         parser,
-        authorizerMapper,
         lockGranularityToUse
     );
     this.task = task;
@@ -218,9 +215,7 @@ public class IncrementalPublishingKafkaIndexTaskRunner extends SeekableStreamInd
   @Override
   public TypeReference<List<SequenceMetadata<KafkaTopicPartition, Long>>> getSequenceMetadataTypeReference()
   {
-    return new TypeReference<List<SequenceMetadata<KafkaTopicPartition, Long>>>()
-    {
-    };
+    return new TypeReference<>() {};
   }
 
   @Nullable
@@ -234,9 +229,7 @@ public class IncrementalPublishingKafkaIndexTaskRunner extends SeekableStreamInd
       log.debug("Got checkpoints from task context[%s].", checkpointsString);
       return toolbox.getJsonMapper().readValue(
           checkpointsString,
-          new TypeReference<TreeMap<Integer, Map<KafkaTopicPartition, Long>>>()
-          {
-          }
+          new TypeReference<>() {}
       );
     } else {
       return null;

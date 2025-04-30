@@ -4,7 +4,6 @@
   "query/node/time" : { "dimensions" : ["server"], "type" : "timer"},
   "query/node/ttfb" : { "dimensions" : ["server"], "type" : "timer"},
   "query/node/bytes" : { "dimensions" : ["server"], "type" : "count"},
-  "query/node/backpressure": { "dimensions" : ["server"], "type" : "timer"},
 
   "query/segment/time" : { "dimensions" : [], "type" : "timer"},
   "query/wait/time" : { "dimensions" : [], "type" : "timer"},
@@ -64,6 +63,11 @@
   "ingest/kinesis/maxLag/time" : { "dimensions" : ["dataSource", "stream"], "type" : "gauge" },
   "ingest/kinesis/avgLag/time" : { "dimensions" : ["dataSource", "stream"], "type" : "gauge" },
   "ingest/kinesis/partitionLag/time" : { "dimensions" : ["dataSource", "stream", "partition"], "type" : "gauge" },
+
+  "ingest/notices/time" : { "dimensions" : ["dataSource", "noticeType"], "type" : "timer" },
+  "ingest/notices/queueSize" : { "dimensions" : ["dataSource"], "type" : "gauge" },
+
+  "ingest/pause/time" : { "dimensions" : ["dataSource", "taskId"], "type" : "timer" },
 
   "task/success/count" : { "dimensions" : ["dataSource"], "type" : "count" },
   "task/failed/count" : { "dimensions" : ["dataSource"], "type" : "count" },
@@ -185,7 +189,7 @@
   "namespace/cache/numEntries" : { "dimensions" : [], "type" : "gauge" },
   "namespace/cache/heapSizeInBytes" : { "dimensions" : [], "type" : "gauge" },
 
-  "service/heartbeat" : { "dimensions" : ["leader"], "type" : "count" },
+  "service/heartbeat" : { "dimensions" : ["leader", "workerVersion", "category", "status", "taskId", "groupId", "dataSource", "taskStatus" ], "type" : "count" },
 
   "killTask/availableSlot/count" : { "dimensions" : [], "type" : "count" },
   "killTask/maxSlot/count" : { "dimensions" : [], "type" : "count" },

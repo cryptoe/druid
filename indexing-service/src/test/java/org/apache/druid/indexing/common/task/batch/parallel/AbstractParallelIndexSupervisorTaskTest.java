@@ -30,10 +30,8 @@ import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
-import org.apache.druid.client.ImmutableDruidDataSource;
 import org.apache.druid.client.coordinator.CoordinatorClient;
 import org.apache.druid.client.coordinator.NoopCoordinatorClient;
-import org.apache.druid.client.indexing.NoopOverlordClient;
 import org.apache.druid.client.indexing.TaskStatusResponse;
 import org.apache.druid.data.input.InputFormat;
 import org.apache.druid.data.input.MaxSizeSplitHintSpec;
@@ -83,6 +81,8 @@ import org.apache.druid.math.expr.ExprMacroTable;
 import org.apache.druid.query.aggregation.AggregatorFactory;
 import org.apache.druid.query.aggregation.LongSumAggregatorFactory;
 import org.apache.druid.query.expression.LookupEnabledTestExprMacroTable;
+import org.apache.druid.query.policy.NoopPolicyEnforcer;
+import org.apache.druid.rpc.indexing.NoopOverlordClient;
 import org.apache.druid.segment.DataSegmentsWithSchemas;
 import org.apache.druid.segment.IndexIO;
 import org.apache.druid.segment.TestIndex;
@@ -105,7 +105,6 @@ import org.apache.druid.server.security.AuthConfig;
 import org.apache.druid.server.security.AuthTestUtils;
 import org.apache.druid.server.security.AuthorizerMapper;
 import org.apache.druid.timeline.DataSegment;
-import org.apache.druid.timeline.SegmentId;
 import org.apache.druid.utils.CompressionUtils;
 import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
 import org.joda.time.DateTime;
@@ -213,6 +212,16 @@ public class AbstractParallelIndexSupervisorTaskTest extends IngestionTestBase
       double transientApiCallFailureRate
   )
   {
+    this(transientTaskFailureRate, transientApiCallFailureRate, false);
+  }
+
+  protected AbstractParallelIndexSupervisorTaskTest(
+      double transientTaskFailureRate,
+      double transientApiCallFailureRate,
+      boolean useSegmentMetadataCache
+  )
+  {
+    super(useSegmentMetadataCache);
     this.transientTaskFailureRate = transientTaskFailureRate;
     this.transientApiCallFailureRate = transientApiCallFailureRate;
   }
@@ -678,6 +687,7 @@ public class AbstractParallelIndexSupervisorTaskTest extends IngestionTestBase
         .indexMergerV9(getIndexMergerV9Factory().create(task.getContextValue(Tasks.STORE_EMPTY_COLUMNS_KEY, true)))
         .intermediaryDataManager(intermediaryDataManager)
         .taskReportFileWriter(new SingleFileTaskReportFileWriter(reportsFile))
+        .policyEnforcer(NoopPolicyEnforcer.instance())
         .authorizerMapper(AuthTestUtils.TEST_AUTHORIZER_MAPPER)
         .chatHandlerProvider(new NoopChatHandlerProvider())
         .rowIngestionMetersFactory(new TestUtils().getRowIngestionMetersFactory())
@@ -716,7 +726,7 @@ public class AbstractParallelIndexSupervisorTaskTest extends IngestionTestBase
           location.getBucketId()
       );
       if (!zippedFile.isPresent()) {
-        throw new ISE("Can't find segment file for location[%s] at path[%s]", location);
+        throw new ISE("Can't find segment file for location[%s] at path[%s]", location, zippedFile);
       }
       final File fetchedFile = new File(partitionDir, StringUtils.format("temp_%s", location.getSubTaskId()));
       FileUtils.writeAtomically(
@@ -1013,26 +1023,22 @@ public class AbstractParallelIndexSupervisorTaskTest extends IngestionTestBase
     @Override
     public ListenableFuture<DataSegment> fetchSegment(String dataSource, String segmentId, boolean includeUnused)
     {
-      ImmutableDruidDataSource druidDataSource;
       try {
-        druidDataSource = exec.submit(
-            () -> getSegmentsMetadataManager().getImmutableDataSourceWithUsedSegments(dataSource)
+        final DataSegment segment = exec.submit(
+            () -> includeUnused
+                  ? getStorageCoordinator().retrieveSegmentForId(dataSource, segmentId)
+                  : getStorageCoordinator().retrieveUsedSegmentForId(dataSource, segmentId)
         ).get();
+
+        if (segment == null) {
+          throw new ISE("Can't find segment for id[%s]", segmentId);
+        } else {
+          return Futures.immediateFuture(segment);
+        }
       }
       catch (InterruptedException | ExecutionException e) {
         throw new RuntimeException(e);
       }
-      if (druidDataSource == null) {
-        throw new ISE("Unknown datasource[%s]", dataSource);
-      }
-
-      for (SegmentId possibleSegmentId : SegmentId.iteratePossibleParsingsWithDataSource(dataSource, segmentId)) {
-        DataSegment segment = druidDataSource.getSegment(possibleSegmentId);
-        if (segment != null) {
-          return Futures.immediateFuture(segment);
-        }
-      }
-      throw new ISE("Can't find segment for id[%s]", segmentId);
     }
   }
 }

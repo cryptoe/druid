@@ -38,6 +38,7 @@ import org.apache.druid.segment.data.CompressionStrategy;
 import org.apache.druid.segment.writeout.TmpFileSegmentWriteOutMediumFactory;
 import org.apache.druid.server.coordinator.CompactionConfigValidationResult;
 import org.apache.druid.server.coordinator.DataSourceCompactionConfig;
+import org.apache.druid.server.coordinator.InlineSchemaDataSourceCompactionConfig;
 import org.apache.druid.server.coordinator.UserCompactionTaskDimensionsConfig;
 import org.apache.druid.server.coordinator.UserCompactionTaskGranularityConfig;
 import org.apache.druid.server.coordinator.UserCompactionTaskQueryTuningConfig;
@@ -96,6 +97,27 @@ public class ClientCompactionRunnerInfoTest
   }
 
   @Test
+  public void testMSQEngineWithNullPartitionsSpecIsInvalid()
+  {
+    DataSourceCompactionConfig compactionConfig = createMSQCompactionConfig(
+        null,
+        Collections.emptyMap(),
+        null,
+        null,
+        null
+    );
+    CompactionConfigValidationResult validationResult = ClientCompactionRunnerInfo.validateCompactionConfig(
+        compactionConfig,
+        CompactionEngine.NATIVE
+    );
+    Assert.assertFalse(validationResult.isValid());
+    Assert.assertEquals(
+        "MSQ: tuningConfig.partitionsSpec must be specified",
+        validationResult.getReason()
+    );
+  }
+
+  @Test
   public void testMSQEngineWithDynamicPartitionsSpecIsValid()
   {
     DataSourceCompactionConfig compactionConfig = createMSQCompactionConfig(
@@ -124,7 +146,7 @@ public class ClientCompactionRunnerInfoTest
   }
 
   @Test
-  public void testMSQEngineWithLongDimensionsInRangePartitionsSpecIsValid()
+  public void testMSQEngineWithLongDimensionsInRangePartitionsSpecIsInvalid()
   {
     DataSourceCompactionConfig compactionConfig = createMSQCompactionConfig(
         new DimensionRangePartitionsSpec(100, null, ImmutableList.of("partitionDim"), false),
@@ -253,27 +275,23 @@ public class ClientCompactionRunnerInfoTest
       List<DimensionSchema> dimensions
   )
   {
-    final DataSourceCompactionConfig config = new DataSourceCompactionConfig(
-        "dataSource",
-        null,
-        500L,
-        10000,
-        new Period(3600),
-        createTuningConfig(partitionsSpec),
-        granularitySpec,
-        new UserCompactionTaskDimensionsConfig(dimensions),
-        metricsSpec,
-        null,
-        null,
-        CompactionEngine.MSQ,
-        context
-    );
-    return config;
+    return InlineSchemaDataSourceCompactionConfig.builder()
+                                                 .forDataSource("dataSource")
+                                                 .withInputSegmentSizeBytes(500L)
+                                                 .withMaxRowsPerSegment(10000)
+                                                 .withSkipOffsetFromLatest(new Period(3600))
+                                                 .withTuningConfig(createTuningConfig(partitionsSpec))
+                                                 .withGranularitySpec(granularitySpec)
+                                                 .withDimensionsSpec(new UserCompactionTaskDimensionsConfig(dimensions))
+                                                 .withMetricsSpec(metricsSpec)
+                                                 .withEngine(CompactionEngine.MSQ)
+                                                 .withTaskContext(context)
+                                                 .build();
   }
 
   private static UserCompactionTaskQueryTuningConfig createTuningConfig(PartitionsSpec partitionsSpec)
   {
-    final UserCompactionTaskQueryTuningConfig tuningConfig = new UserCompactionTaskQueryTuningConfig(
+    return new UserCompactionTaskQueryTuningConfig(
         40000,
         null,
         2000L,
@@ -302,6 +320,5 @@ public class ClientCompactionRunnerInfoTest
         100,
         2
     );
-    return tuningConfig;
   }
 }

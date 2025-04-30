@@ -16,14 +16,13 @@
  * limitations under the License.
  */
 
-import { Classes, Intent } from '@blueprintjs/core';
+import { Classes, Icon, Intent } from '@blueprintjs/core';
 import type { IconName } from '@blueprintjs/icons';
 import { IconNames } from '@blueprintjs/icons';
 import copy from 'copy-to-clipboard';
 import * as JSONBig from 'json-bigint-native';
 import numeral from 'numeral';
 import type { JSX } from 'react';
-import React from 'react';
 
 import { AppToaster } from '../singletons';
 
@@ -58,6 +57,10 @@ export function isSimpleArray(a: any): a is (string | number | boolean)[] {
       return t === 'string' || t === 'number' || t === 'boolean';
     })
   );
+}
+
+export function arraysEqualByElement<T>(xs: T[], ys: T[]): boolean {
+  return xs.length === ys.length && xs.every((x, i) => x === ys[i]);
 }
 
 export function wait(ms: number): Promise<void> {
@@ -191,9 +194,9 @@ export function mapRecord<T, Q>(
   return newRecord;
 }
 
-export function mapRecordIfChanged<T>(
+export function mapRecordOrReturn<T>(
   record: Record<string, T>,
-  fn: (value: T, key: string) => T,
+  fn: (value: T, key: string) => T | undefined,
 ): Record<string, T> {
   const newRecord: Record<string, T> = {};
   let changed = false;
@@ -252,6 +255,14 @@ export function uniq(array: readonly string[]): string[] {
   });
 }
 
+export function allSameValue<T>(xs: readonly T[]): T | undefined {
+  const sameValue: T | undefined = xs[0];
+  for (let i = 1; i < xs.length; i++) {
+    if (sameValue !== xs[i]) return;
+  }
+  return sameValue;
+}
+
 // ----------------------------
 
 export function formatEmpty(str: string): string {
@@ -266,6 +277,14 @@ export function formatInteger(n: NumberLike): string {
 
 export function formatNumber(n: NumberLike): string {
   return (n || 0).toLocaleString('en-US', { maximumFractionDigits: 20 });
+}
+
+export function formatNumberAbbreviated(n: NumberLike): string {
+  return (n || 0).toLocaleString('en-US', {
+    notation: 'compact',
+    compactDisplay: 'short',
+    maximumFractionDigits: 2,
+  });
 }
 
 export function formatRate(n: NumberLike) {
@@ -374,6 +393,14 @@ export function formatDurationHybrid(ms: NumberLike): string {
   }
 }
 
+export function timezoneOffsetInMinutesToString(offsetInMinutes: number, padHour: boolean): string {
+  const sign = offsetInMinutes < 0 ? '-' : '+';
+  const absOffset = Math.abs(offsetInMinutes);
+  const h = Math.floor(absOffset / 60);
+  const m = absOffset % 60;
+  return `${sign}${padHour ? pad2(h) : h}:${pad2(m)}`;
+}
+
 function pluralize(word: string): string {
   // Ignoring irregular plurals.
   if (/(s|x|z|ch|sh)$/.test(word)) {
@@ -414,7 +441,10 @@ export function filterMap<T, Q>(xs: readonly T[], f: (x: T, i: number) => Q | un
   return xs.map(f).filter((x: Q | undefined) => typeof x !== 'undefined') as Q[];
 }
 
-export function filterMapIfChanged<T>(xs: T[], f: (x: T, i: number) => T | undefined): T[] {
+export function filterMapOrReturn<T>(
+  xs: readonly T[],
+  f: (x: T, i: number) => T | undefined,
+): readonly T[] {
   let changed = false;
   const newXs = filterMap(xs, (x, i) => {
     const newX = f(x, i);
@@ -424,11 +454,33 @@ export function filterMapIfChanged<T>(xs: T[], f: (x: T, i: number) => T | undef
   return changed ? newXs : xs;
 }
 
+export function filterOrReturn<T>(xs: readonly T[], f: (x: T, i: number) => unknown): readonly T[] {
+  const newXs = xs.filter(f);
+  return newXs.length === xs.length ? xs : newXs;
+}
+
 export function findMap<T, Q>(
   xs: readonly T[],
   f: (x: T, i: number) => Q | undefined,
 ): Q | undefined {
   return filterMap(xs, f)[0];
+}
+
+export function minBy<T>(xs: T[], f: (item: T, index: number) => number): T | undefined {
+  if (!xs.length) return undefined;
+
+  let minItem = xs[0];
+  let minValue = f(xs[0], 0);
+
+  for (let i = 1; i < xs.length; i++) {
+    const currentValue = f(xs[i], i);
+    if (currentValue < minValue) {
+      minValue = currentValue;
+      minItem = xs[i];
+    }
+  }
+
+  return minItem;
 }
 
 export function changeByIndex<T>(
@@ -613,16 +665,14 @@ export function hashJoaat(str: string): number {
   return (hash & 4294967295) >>> 0;
 }
 
-export function objectHash(obj: any): string {
-  return hashJoaat(JSONBig.stringify(obj)).toString(16).padStart(8);
+export const OVERLAY_OPEN_SELECTOR = `.${Classes.PORTAL} .${Classes.OVERLAY_OPEN}`;
+
+export function hasOverlayOpen(): boolean {
+  return Boolean(document.querySelector(OVERLAY_OPEN_SELECTOR));
 }
 
-export function hasPopoverOpen(): boolean {
-  return Boolean(document.querySelector(`${Classes.PORTAL} ${Classes.OVERLAY} ${Classes.POPOVER}`));
-}
-
-export function checkedCircleIcon(checked: boolean): IconName {
-  return checked ? IconNames.TICK_CIRCLE : IconNames.CIRCLE;
+export function checkedCircleIcon(checked: boolean, exclude?: boolean): IconName {
+  return checked ? (exclude ? IconNames.CROSS_CIRCLE : IconNames.TICK_CIRCLE) : IconNames.CIRCLE;
 }
 
 export function tickIcon(checked: boolean): IconName {
@@ -657,3 +707,16 @@ export function offsetToRowColumn(str: string, offset: number): RowColumn | unde
 
   return;
 }
+
+export function xor(a: unknown, b: unknown): boolean {
+  return Boolean(a ? !b : b);
+}
+
+export function toggle<T>(xs: readonly T[], x: T, eq?: (a: T, b: T) => boolean): T[] {
+  const e = eq || ((a, b) => a === b);
+  return xs.find(_ => e(_, x)) ? xs.filter(d => !e(d, x)) : xs.concat([x]);
+}
+
+export const EXPERIMENTAL_ICON = (
+  <Icon icon={IconNames.LAB_TEST} intent={Intent.WARNING} data-tooltip="Experimental" />
+);

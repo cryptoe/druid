@@ -293,7 +293,7 @@ public class IndexGeneratorJob implements Jobby
       AggregatorFactory[] aggs,
       HadoopDruidIndexerConfig config,
       @Nullable Iterable<String> oldDimOrder,
-      Map<String, ColumnFormat> oldCapabilities
+      @Nullable Map<String, ColumnFormat> oldCapabilities
   )
   {
     final HadoopTuningConfig tuningConfig = config.getSchema().getTuningConfig();
@@ -311,7 +311,6 @@ public class IndexGeneratorJob implements Jobby
                                             .setIndexSchema(indexSchema)
                                             .setMaxRowCount(tuningConfig.getMaxRowsInMemory())
                                             .setMaxBytesInMemory(tuningConfig.getMaxBytesInMemoryOrDefault())
-                                            .setUseMaxMemoryEstimates(tuningConfig.isUseMaxMemoryEstimates())
                                             .build();
 
     if (oldDimOrder != null && !indexSchema.getDimensionsSpec().hasFixedDimensions()) {

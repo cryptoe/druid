@@ -20,7 +20,6 @@ import type { MenuItemProps } from '@blueprintjs/core';
 import { MenuItem } from '@blueprintjs/core';
 import classNames from 'classnames';
 import type { ReactNode } from 'react';
-import React from 'react';
 
 import { tickIcon } from '../../utils';
 
@@ -32,9 +31,9 @@ function toKey(value: boolean | undefined) {
 
 const DEFAULT_OPTIONS_TEXT: Partial<Record<TrueFalseUndefined, string>> = { undefined: 'Auto' };
 
-export const ENABLE_DISABLE_OPTIONS_TEXT: Partial<Record<TrueFalseUndefined, string>> = {
-  true: 'Enable',
-  false: 'Disable',
+export const ENABLED_DISABLED_OPTIONS_TEXT: Partial<Record<TrueFalseUndefined, string>> = {
+  true: 'Enabled',
+  false: 'Disabled',
   undefined: 'Auto',
 };
 

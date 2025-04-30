@@ -38,11 +38,13 @@ import org.apache.druid.msq.indexing.error.MSQException;
 import org.apache.druid.msq.input.ReadableInput;
 import org.apache.druid.query.DataSource;
 import org.apache.druid.query.InlineDataSource;
+import org.apache.druid.query.JoinAlgorithm;
 import org.apache.druid.query.Query;
+import org.apache.druid.query.planning.ExecutionVertex;
+import org.apache.druid.query.policy.PolicyEnforcer;
 import org.apache.druid.segment.ColumnValueSelector;
 import org.apache.druid.segment.Cursor;
 import org.apache.druid.segment.SegmentReference;
-import org.apache.druid.sql.calcite.planner.JoinAlgorithm;
 import org.apache.druid.sql.calcite.planner.PlannerContext;
 
 import java.io.IOException;
@@ -64,6 +66,7 @@ import java.util.stream.Collectors;
 public class BroadcastJoinSegmentMapFnProcessor implements FrameProcessor<Function<SegmentReference, SegmentReference>>
 {
   private final Query<?> query;
+  private final PolicyEnforcer policyEnforcer;
   private final Int2IntMap inputNumberToProcessorChannelMap;
   private final List<ReadableFrameChannel> channels;
   private final List<FrameReader> channelReaders;
@@ -87,6 +90,7 @@ public class BroadcastJoinSegmentMapFnProcessor implements FrameProcessor<Functi
    */
   public BroadcastJoinSegmentMapFnProcessor(
       final Query<?> query,
+      final PolicyEnforcer policyEnforcer,
       final Int2IntMap inputNumberToProcessorChannelMap,
       final List<ReadableFrameChannel> channels,
       final List<FrameReader> channelReaders,
@@ -94,6 +98,7 @@ public class BroadcastJoinSegmentMapFnProcessor implements FrameProcessor<Functi
   )
   {
     this.query = query;
+    this.policyEnforcer = policyEnforcer;
     this.inputNumberToProcessorChannelMap = inputNumberToProcessorChannelMap;
     this.channels = channels;
     this.channelReaders = channelReaders;
@@ -117,6 +122,7 @@ public class BroadcastJoinSegmentMapFnProcessor implements FrameProcessor<Functi
    */
   public static BroadcastJoinSegmentMapFnProcessor create(
       final Query<?> query,
+      final PolicyEnforcer policyEnforcer,
       final Int2ObjectMap<ReadableInput> sideChannels,
       final long memoryReservedForBroadcastJoin
   )
@@ -134,6 +140,7 @@ public class BroadcastJoinSegmentMapFnProcessor implements FrameProcessor<Functi
 
     return new BroadcastJoinSegmentMapFnProcessor(
         query,
+        policyEnforcer,
         inputNumberToProcessorChannelMap,
         inputChannels,
         channelReaders,
@@ -193,7 +200,8 @@ public class BroadcastJoinSegmentMapFnProcessor implements FrameProcessor<Functi
 
   private Function<SegmentReference, SegmentReference> createSegmentMapFunction()
   {
-    return inlineChannelData(query.getDataSource()).createSegmentMapFunction(query, new AtomicLong());
+    DataSource transformed = inlineChannelData(query.getDataSource());
+    return ExecutionVertex.of(query.withDataSource(transformed)).createSegmentMapFunction(policyEnforcer);
   }
 
   DataSource inlineChannelData(final DataSource originalDataSource)
@@ -230,7 +238,6 @@ public class BroadcastJoinSegmentMapFnProcessor implements FrameProcessor<Functi
    * broadcast tables.
    *
    * @param readableInputs all readable input channel numbers, including non-side-channels
-   *
    * @return whether side channels have been fully read
    */
   boolean buildBroadcastTablesIncrementally(final IntSet readableInputs)

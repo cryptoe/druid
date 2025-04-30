@@ -22,6 +22,7 @@ package org.apache.druid.indexing.overlord;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.ImmutableList;
 import org.apache.druid.common.guava.SettableSupplier;
+import org.apache.druid.discovery.NodeRole;
 import org.apache.druid.indexer.TaskStatus;
 import org.apache.druid.indexing.common.TaskLockType;
 import org.apache.druid.indexing.common.config.TaskStorageConfig;
@@ -33,8 +34,12 @@ import org.apache.druid.java.util.common.concurrent.Execs;
 import org.apache.druid.metadata.DerbyMetadataStorageActionHandlerFactory;
 import org.apache.druid.metadata.IndexerSQLMetadataStorageCoordinator;
 import org.apache.druid.metadata.TestDerbyConnector;
+import org.apache.druid.metadata.segment.SqlSegmentMetadataTransactionFactory;
+import org.apache.druid.metadata.segment.cache.NoopSegmentMetadataCache;
 import org.apache.druid.segment.metadata.CentralizedDatasourceSchemaConfig;
 import org.apache.druid.segment.metadata.SegmentSchemaManager;
+import org.apache.druid.server.coordinator.simulate.TestDruidLeaderSelector;
+import org.apache.druid.server.metrics.NoopServiceEmitter;
 import org.joda.time.Interval;
 import org.junit.After;
 import org.junit.Assert;
@@ -45,6 +50,7 @@ import org.junit.Test;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -80,6 +86,15 @@ public class TaskLockBoxConcurrencyTest
     lockbox = new TaskLockbox(
         taskStorage,
         new IndexerSQLMetadataStorageCoordinator(
+            new SqlSegmentMetadataTransactionFactory(
+                objectMapper,
+                derby.metadataTablesConfigSupplier().get(),
+                derbyConnector,
+                new TestDruidLeaderSelector(),
+                Set.of(NodeRole.OVERLORD),
+                NoopSegmentMetadataCache.instance(),
+                NoopServiceEmitter.instance()
+            ),
             objectMapper,
             derby.metadataTablesConfigSupplier().get(),
             derbyConnector,

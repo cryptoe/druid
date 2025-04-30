@@ -26,14 +26,11 @@ import com.google.common.collect.ImmutableList;
 import org.apache.druid.error.DruidException;
 import org.apache.druid.java.util.common.IAE;
 import org.apache.druid.java.util.common.ISE;
-import org.apache.druid.query.planning.DataSourceAnalysis;
 import org.apache.druid.segment.SegmentReference;
 import org.apache.druid.utils.CollectionUtils;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -138,36 +135,26 @@ public class UnionDataSource implements DataSource
   }
 
   @Override
-  public boolean isConcrete()
+  public boolean isProcessable()
   {
-    return dataSources.stream().allMatch(DataSource::isConcrete);
+    return dataSources.stream().allMatch(DataSource::isProcessable);
   }
 
   @Override
-  public Function<SegmentReference, SegmentReference> createSegmentMapFunction(
-      Query query,
-      AtomicLong cpuTime
-  )
+  public Function<SegmentReference, SegmentReference> createSegmentMapFunction(Query query)
   {
+    for (DataSource dataSource : dataSources) {
+      if (!dataSource.getChildren().isEmpty()) {
+        throw new ISE("Union datasource with non-leaf inputs is not supported [%s]!", dataSources);
+      }
+    }
     return Function.identity();
-  }
-
-  @Override
-  public DataSource withUpdatedDataSource(DataSource newSource)
-  {
-    return newSource;
   }
 
   @Override
   public byte[] getCacheKey()
   {
     return null;
-  }
-
-  @Override
-  public DataSourceAnalysis getAnalysis()
-  {
-    return new DataSourceAnalysis(this, null, null, Collections.emptyList());
   }
 
   @Override
@@ -197,5 +184,10 @@ public class UnionDataSource implements DataSource
     return "UnionDataSource{" +
            "dataSources=" + dataSources +
            '}';
+  }
+
+  public static boolean isCompatibleDataSource(DataSource dataSource)
+  {
+    return (dataSource instanceof TableDataSource || dataSource instanceof InlineDataSource);
   }
 }

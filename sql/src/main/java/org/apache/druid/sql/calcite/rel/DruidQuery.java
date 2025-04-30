@@ -63,8 +63,8 @@ import org.apache.druid.query.aggregation.LongMinAggregatorFactory;
 import org.apache.druid.query.aggregation.PostAggregator;
 import org.apache.druid.query.aggregation.SimpleLongAggregatorFactory;
 import org.apache.druid.query.dimension.DimensionSpec;
-import org.apache.druid.query.filter.AndDimFilter;
 import org.apache.druid.query.filter.DimFilter;
+import org.apache.druid.query.filter.DimFilters;
 import org.apache.druid.query.groupby.GroupByQuery;
 import org.apache.druid.query.groupby.having.DimFilterHavingSpec;
 import org.apache.druid.query.groupby.orderby.DefaultLimitSpec;
@@ -76,7 +76,7 @@ import org.apache.druid.query.operator.OperatorFactory;
 import org.apache.druid.query.operator.ScanOperatorFactory;
 import org.apache.druid.query.operator.WindowOperatorQuery;
 import org.apache.druid.query.ordering.StringComparator;
-import org.apache.druid.query.planning.DataSourceAnalysis;
+import org.apache.druid.query.planning.ExecutionVertex;
 import org.apache.druid.query.scan.ScanQuery;
 import org.apache.druid.query.spec.LegacySegmentSpec;
 import org.apache.druid.query.timeboundary.TimeBoundaryQuery;
@@ -113,12 +113,11 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.SortedSet;
-import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 /**
@@ -207,6 +206,7 @@ public class DruidQuery
       final PlannerContext plannerContext,
       final RexBuilder rexBuilder,
       final boolean finalizeAggregations,
+      final boolean applyPolicies,
       @Nullable VirtualColumnRegistry virtualColumnRegistry
   )
   {
@@ -303,7 +303,10 @@ public class DruidQuery
     }
 
     return new DruidQuery(
-        dataSource,
+        applyPolicies ? dataSource.withPolicies(
+            plannerContext.getAuthorizationResult().getPolicyMap(),
+            plannerContext.getPlannerToolbox().getPolicyEnforcer()
+        ) : dataSource,
         plannerContext,
         filter,
         selectProjection,
@@ -847,7 +850,7 @@ public class DruidQuery
       }
       final boolean useIntervalFiltering = canUseIntervalFiltering(filteredDataSource);
       final Filtration baseFiltration = toFiltration(
-          new AndDimFilter(dimFilterList),
+          DimFilters.conjunction(dimFilterList),
           virtualColumnRegistry.getFullRowSignature(),
           useIntervalFiltering
       );
@@ -874,7 +877,8 @@ public class DruidQuery
           joinDataSource.getConditionAnalysis(),
           joinDataSource.getJoinType(),
           leftFiltration.getDimFilter(),
-          joinableFactoryWrapper
+          joinableFactoryWrapper,
+          joinDataSource.getJoinAlgorithm()
       );
       return Pair.of(newDataSource, queryFiltration);
     } else {
@@ -888,8 +892,8 @@ public class DruidQuery
    */
   private static boolean canUseIntervalFiltering(final DataSource dataSource)
   {
-    final DataSourceAnalysis analysis = dataSource.getAnalysis();
-    return !analysis.getBaseQuery().isPresent() && analysis.isTableBased();
+    ExecutionVertex ev = ExecutionVertex.ofDataSource(dataSource);
+    return ev.isTableBased();
   }
 
   private static Filtration toFiltration(
@@ -924,7 +928,8 @@ public class DruidQuery
       return true;
     }
 
-    if (dataSource.getAnalysis().isConcreteAndTableBased()) {
+    ExecutionVertex ev = ExecutionVertex.ofDataSource(dataSource);
+    if (ev.isProcessable() && ev.isTableBased()) {
       // Always OK: queries on concrete tables (regular Druid datasources) use segment-based cursors
       // (IncrementalIndex or QueryableIndex). These clip query interval to data interval, making wide query
       // intervals safer. They do not have special checks for granularity and interval safety.
@@ -1428,7 +1433,7 @@ public class DruidQuery
         if (queryGranularity != null) {
           // group by more than one timestamp_floor
           // eg: group by timestamp_floor(__time to DAY),timestamp_floor(__time, to HOUR)
-          queryGranularity = null;
+          theContext.clear();
           break;
         }
         queryGranularity = granularity;
@@ -1449,7 +1454,13 @@ public class DruidQuery
         }
       }
     }
-    if (queryGranularity == null) {
+
+    if (grouping.getDimensions().isEmpty() && grouping.hasGroupingDimensionsDropped()) {
+      // GROUP BY ().
+      theContext.put(GroupByQuery.CTX_HAS_DROPPED_DIMENSIONS, grouping.hasGroupingDimensionsDropped());
+    }
+
+    if (theContext.isEmpty()) {
       return query;
     }
     return query.withOverriddenContext(theContext);
@@ -1468,7 +1479,7 @@ public class DruidQuery
     }
 
     // This is not yet supported
-    if (dataSource.isConcrete()) {
+    if (dataSource.isProcessable()) {
       return null;
     }
     if (dataSource instanceof TableDataSource) {
@@ -1530,7 +1541,7 @@ public class DruidQuery
       return null;
     }
 
-    if (dataSource.isConcrete()) {
+    if (dataSource.isProcessable()) {
       // Currently only non-time orderings of subqueries are allowed.
       setPlanningErrorOrderByNonTimeIsUnsupported();
       return null;
@@ -1655,26 +1666,29 @@ public class DruidQuery
                   : Order.ASCENDING
               )
       ).collect(Collectors.toList());
+
     } else {
       orderByColumns = Collections.emptyList();
     }
 
     if (!plannerContext.featureAvailable(EngineFeature.SCAN_ORDER_BY_NON_TIME) && !orderByColumns.isEmpty()) {
       if (orderByColumns.size() > 1
-          || orderByColumns.stream()
-                           .anyMatch(orderBy -> !orderBy.getColumnName().equals(ColumnHolder.TIME_COLUMN_NAME))) {
-        // We cannot handle this ordering, but we encounter this ordering as part of the exploration of the volcano
-        // planner, which means that the query that we are looking right now might only be doing this as one of the
-        // potential branches of exploration rather than being a semantic requirement of the query itself.  So, it is
-        // not safe to send an error message telling the end-user exactly what is happening, instead we need to set the
-        // planning error and hope.
-        setPlanningErrorOrderByNonTimeIsUnsupported();
+          || orderByColumns.stream().anyMatch(orderBy -> !orderBy.getColumnName().equals(ColumnHolder.TIME_COLUMN_NAME))) {
+        if (!plannerContext.queryContext().isDecoupledMode()) {
+          // We cannot handle this ordering, but we encounter this ordering as part of the exploration of the volcano
+          // planner, which means that the query that we are looking right now might only be doing this as one of the
+          // potential branches of exploration rather than being a semantic requirement of the query itself.  So, it is
+          // not safe to send an error message telling the end-user exactly what is happening, instead we need to set the
+          // planning error and hope.
+          setPlanningErrorOrderByNonTimeIsUnsupported();
+        }
         return null;
+
       }
     }
 
-    // Compute the list of columns to select, sorted and deduped.
-    final SortedSet<String> scanColumns = new TreeSet<>(outputRowSignature.getColumnNames());
+    // Deduplicate column list
+    final Set<String> scanColumns = new LinkedHashSet<>(outputRowSignature.getColumnNames());
     orderByColumns.forEach(column -> scanColumns.add(column.getColumnName()));
 
     final VirtualColumns virtualColumns = getVirtualColumns(true);
